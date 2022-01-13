@@ -1,0 +1,654 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## Seaded
+
+Paketid:
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(lemon)
+library(scales)
+library(ggrepel)
+```
+
+Loe andmed sisse:
+
+```{r}
+data <- read.csv("andmed.csv")
+data_mk <- read.csv("andmed_mk.csv")
+```
+
+Vaata andmeid:
+
+```{r}
+data_mk
+```
+
+Defineeri värvid:
+
+```{r}
+GRAY1 = "#231F20"
+GRAY2 = "#414040"
+GRAY3 = "#555655"
+GRAY4 = "#646369"
+GRAY5 = "#76787B"
+GRAY6 = "#828282"
+GRAY7 = "#929497"
+GRAY8 = "#A6A6A5"
+GRAY9 = "#BFBEBE"
+BLUE1 = "#174A7E"
+BLUE2 = "#4A81BF"
+BLUE3 = "#94B2D7"
+BLUE4 = "#94AFC5"
+BLUE5 = "#22435e"
+BLUE6 = "#95B3D7"
+RED1 = "#C3514E"
+RED2 = "#E6BAB7"
+RED3 = "#800000"
+GREEN1 = "#0C8040"
+GREEN2 = "#9ABB59"
+GREEN3 = "#31859C"
+GREEN4 = "#4BACC6"
+GREEN5 = "#93CDDD"
+ORANGE1 = "#F79747"
+ORANGE2 = "#FAC090"
+```
+
+Defineeri SWD teemafunktsioon:
+
+```{r}
+theme_swd <- function() {
+  theme_minimal(base_size = 11, base_family = "Helvetica") +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.line = element_line(size = .13, color = GRAY9),
+      axis.text = element_text(color = GRAY5),
+      axis.ticks.x = element_line(size = 0.5, color = GRAY9),
+      axis.ticks.y = element_line(size = 0.5, color = GRAY9),
+      axis.title = element_text(color = GRAY3),
+      axis.title.y = element_text(hjust = 1, margin = margin(0, 6, 0, 15, "pt")),
+      axis.title.x = element_text(hjust = 0, margin = margin(6, 0, 15, 0, "pt")),
+      plot.subtitle = element_text(color = GRAY4, size= 11),
+      plot.title = element_text(color = GRAY4, size= 15),
+      plot.title.position = "plot", # This aligns the plot title to the very left edge
+      plot.caption = element_text(hjust = 0, color = GRAY6),
+      plot.caption.position = "plot",
+      plot.margin = margin(.5,.5,.5,.5,"cm"),
+      strip.text = element_text(color = GRAY7)) 
+}
+```
+
+# Andmestik tegevusvaldkondade lõikes
+
+Leia suured kulud:
+
+```{r}
+data %>%
+  group_by(Aasta,Liik) %>% 
+  summarise(.groups="keep",Kokku = sum(Kogukulu)/1000) %>%
+  arrange(Kokku, Aasta)
+```
+
+Liigid, mille osakaalud omavad tähtsust:
+
+```{r}
+Liigid = c("Soojus","Põlevkiviõli","Põlevkivi","Puiduhake ja -jäätmed","Maagaas","Kerge kütteõli","Elektrienergia","Diislikütus","Autobensiin")
+```
+
+Mustand:
+
+```{r}
+data %>% 
+  filter(Liik %in% Liigid) %>%
+  group_by(Aasta,Liik) %>% 
+  summarise(.groups="keep",Kokku = sum(Kogukulu)/1000) %>%
+  ggplot(aes(x = Aasta, y = Kokku, color = Liik)) +
+    geom_line() +
+    theme_swd() +
+    theme(
+      axis.text.x = element_text(size = 9, color = GRAY7),
+      axis.text.y = element_text(size = 9, color = GRAY7)
+    ) +
+    ylim(c(0, 8e5)) +
+    xlim(c(2010, 2020)) +
+    scale_x_continuous(breaks=seq(2011,2020,by=1)) +
+    scale_y_continuous(labels=label_number()) +
+    coord_capped_cart(bottom = 'both', left = "both")  +
+    ylab("mln eurot") +
+    xlab("Aasta") + 
+    ggtitle("Energia kulutused", subtitle = "Kulutused energiale liigi kaupa aastatel 2011 - 2020")
+```
+
+Üleval oleval joonisel näeme, et aasta 2019 kulutused erinevatele energialiikidele on tunduvalt suuremad. Huvitav, miks? Allpool teen kindlaks, et need tulenevad kodumajapidamiste kulutustest aastal 2019. Teiste aastate kohta lihtsalt kodumajapidamiste kohta andmeid pole. Seega vaatlen erinevaid ärivaldkondi ning kodumajapidamisi eraldi.
+
+Summaarsed kulutused energia ja kütuseliikide lõikes:
+
+```{r}
+liigi_kaupa = data %>% 
+  filter(Tegevusala != "Kodumajapidamine") %>%
+  group_by(Liik) %>% 
+  summarise(.groups="keep",Kokku = sum(Kogukulu)/1000) %>%
+  mutate(
+    bar_color = case_when(
+      Liik %in% c("Autobensiin") ~ BLUE2,
+      Liik %in% c("Diislikütus") ~ GREEN3,
+      Liik %in% c("Elektrienergia") ~ GREEN2,
+      Liik %in% c("Soojus") ~ ORANGE1,
+      Liik %in% c("Põlevkivi") ~ RED1,
+      Liik %in% c("Kerge kütteõli") ~ GRAY3,
+      Liik %in% c("Maagaas") ~ GREEN1,
+      TRUE ~ GRAY9
+    )
+  )
+
+ggplot(liigi_kaupa, aes(x = Kokku, y = Liik, fill = bar_color)) +
+  geom_bar(stat = "identity") +
+  coord_capped_cart(bottom = 'both', left = "both")  +
+  ylab("") +
+  xlab("mln eurot") + 
+  ggtitle("Energia kulutused", subtitle = "Kulutused energiale liigi kaupa aastatel 2011 - 2020") +
+  scale_fill_identity() +
+  theme_swd() +
+  theme(
+    axis.text.x = element_text(size = 9, color = GRAY7),
+    axis.text.y = element_text(size = 9, color = GRAY7),
+    legend.position = "none"
+  )
+
+ggsave("0_kõik_liigid.png", width = 9, height = 6)
+```
+
+Grupeeri liigi järgi ning kuva kogukulud energiale liigi kaupa üle aastate 2011-2020:
+
+```{r}
+
+liigi_kaupa = data %>% 
+  filter(Liik %in% Liigid) %>%
+  filter(Tegevusala != "Kodumajapidamine") %>%
+  group_by(Aasta,Liik) %>% 
+  summarise(.groups="keep",Kokku = sum(Kogukulu)/1000) %>%
+  mutate(
+    line_color = case_when(
+      #Liik %in% c("Autobensiin") ~ BLUE2,
+      Liik %in% c("Diislikütus") ~ GREEN3,
+      Liik %in% c("Elektrienergia") ~ GREEN2,
+      #Liik %in% c("Soojus") ~ ORANGE1,
+      #Liik %in% c("Põlevkivi") ~ RED1,
+      #Liik %in% c("Kerge kütteõli") ~ GRAY3,
+      #Liik %in% c("Maagaas") ~ GREEN1,
+      TRUE ~ GRAY9
+    )
+  )
+
+labels = liigi_kaupa %>% 
+  filter(Liik %in% c("Diislikütus", "Elektrienergia")) %>%
+  group_by(Liik) %>% 
+  filter(Aasta == 2011)
+
+ggplot(liigi_kaupa, aes(x = Aasta, y = Kokku, group = Liik, color = line_color)) +
+  geom_line() +
+  geom_text(aes(x = Aasta, y = Kokku, label = Liik,color = line_color), hjust = 0, vjust = -1, nudge_x = -0.05, data = labels) +
+  scale_x_continuous(breaks=seq(2011,2020,by=1)) +
+  scale_y_continuous(labels=label_number()) +
+  coord_capped_cart(bottom = 'both', left = "both")  +
+  ylab("mln eurot") +
+  xlab("Aasta") + 
+  ggtitle("Energia kulutused", subtitle = "Kulutused energiale liigi kaupa aastatel 2011 - 2020") +
+  scale_color_identity() +
+  theme_swd() +
+  theme(
+    axis.text.x = element_text(size = 9, color = GRAY7),
+    axis.text.y = element_text(size = 9, color = GRAY7),
+    legend.position = "none"
+  ) +
+  ylim(c(0, 800))
+
+ggsave("1_liigiti.png")
+```
+
+Energia- ja kütuseliikide hinnad aastatel 2011 - 2020:
+
+```{r}
+hinnad = data %>%
+  filter(Liik %in% Liigid) %>%
+  filter(Tegevusala != "Kodumajapidamine") %>%
+  select(Aasta,Liik,Ühikuhind) %>%
+  group_by(Aasta,Liik) %>%
+  summarize(.groups="keep", Üh_Hind = mean(Ühikuhind)) %>%
+  mutate(
+    line_color = case_when(
+      Liik %in% c("Autobensiin") ~ BLUE2,
+      Liik %in% c("Diislikütus") ~ GREEN3,
+      #Liik %in% c("Elektrienergia") ~ GREEN2,
+      #Liik %in% c("Soojus") ~ ORANGE1,
+      #Liik %in% c("Põlevkivi") ~ RED1,
+      #Liik %in% c("Kerge kütteõli") ~ GRAY3,
+      #Liik %in% c("Maagaas") ~ GREEN1,
+      TRUE ~ GRAY9
+    )
+  )
+
+labels = hinnad %>% 
+  filter(Liik %in% c("Autobensiin", "Diislikütus")) %>%
+  group_by(Liik) %>% 
+  filter(Aasta == 2011)
+
+
+ggplot(hinnad, aes(x = Aasta, y = Üh_Hind, group = Liik, color = line_color)) +
+  geom_line() +
+  geom_text(aes(x = Aasta, y = Üh_Hind, label = Liik,color = line_color), hjust = 0, vjust = -1, nudge_x = -0.05, data = labels) +
+  scale_x_continuous(breaks=seq(2011,2020,by=1)) +
+  scale_y_continuous(labels=label_number()) +
+  ylab("tuhat eurot ühiku kohta") +
+  xlab("Aasta") + 
+  ggtitle("Energia/kütuseliigi ühiku hind", subtitle = "Energia- ja kütuseliigi hinnad ühikute kohta 2011 - 2020") +
+  scale_color_identity() +
+  theme_swd() +
+  coord_capped_cart(bottom = 'both', left = "both")  +
+  theme(
+    axis.text.x = element_text(size = 9, color = GRAY7),
+    axis.text.y = element_text(size = 9, color = GRAY7),
+    legend.position = "none"
+  ) +
+  ylim(c(0, 1500))
+
+ggsave("3_ühikuhind.png")
+```
+
+Üldine energia- ja kütuseliigi võrdlus 10 aasta (2011-2020) keskmise põhjal:
+
+```{r}
+hinnad = data %>%
+  filter(Liik %in% Liigid) %>%
+  filter(Tegevusala != "Kodumajapidamine") %>%
+  select(Aasta,Liik,Ühikuhind) %>%
+  group_by(Liik) %>%
+  summarize(.groups="keep", Üh_Hind = mean(Ühikuhind)) %>%
+  mutate(
+    bar_color = case_when(
+      Liik %in% c("Autobensiin") ~ BLUE2,
+      Liik %in% c("Diislikütus") ~ GREEN3,
+      TRUE ~ GRAY9
+    )
+  )
+
+
+ggplot(hinnad, aes(x = Üh_Hind, y = Liik, fill = bar_color)) +
+  geom_bar(stat = "identity",position = "dodge") +
+  scale_fill_identity() +
+  ylab("") +
+  xlab("tuhat eurot") + 
+  ggtitle("Energia/kütuseliigi hind", subtitle = "Energia- ja kütuseliigi hinnad 2011 - 2020") +
+  theme_swd() +
+  coord_capped_cart(bottom = 'both', left = "both")  +
+  theme(
+    axis.text.x = element_text(size = 9, color = GRAY7),
+    axis.text.y = element_text(size = 9, color = GRAY7),
+    legend.position = "none"
+  ) +
+  xlim(c(0, 1500))
+
+ggsave("4_keskm_ühikuhind.png")
+```
+
+Energia- ja kütuseliikide koguste võrdlused ajas, ühikuteks on 1000 tonni, 1000 tm, 1 mln m3, 1 GWh vastavate energialiikide puhul:
+
+```{r}
+hulgad = data %>%
+  filter(Tegevusala != "Kodumajapidamine") %>%
+  filter(Liik %in% Liigid) %>%
+  select(Aasta,Liik,Kogus) %>%
+  group_by(Aasta,Liik) %>%
+  summarize(.groups="keep", Hulk = sum(Kogus)) %>%
+  mutate(line_color = case_when(
+      #Liik %in% c("Autobensiin") ~ BLUE2,
+      #Liik %in% c("Diislikütus") ~ GREEN3,
+      #Liik %in% c("Elektrienergia") ~ GREEN2,
+      #Liik %in% c("Soojus") ~ ORANGE1,
+      Liik %in% c("Põlevkivi") ~ RED1,
+      #Liik %in% c("Kerge kütteõli") ~ GRAY3,
+      #Liik %in% c("Maagaas") ~ GREEN1,
+      TRUE ~ GRAY9
+    ))
+
+labels = hulgad %>% 
+  filter(Liik %in% c("Põlevkivi")) %>%
+  group_by(Liik) %>% 
+  filter(Aasta == 2020)
+
+  ggplot(hulgad,aes(x = Aasta, y = Hulk, group = Liik, color = line_color)) +
+    geom_line() + 
+    geom_text(aes(x = Aasta, y = Hulk, label = Liik,color = line_color), hjust = 1, vjust = 1, nudge_x = -0.1, data = labels) +
+    scale_x_continuous(breaks=seq(2011,2020,by=1)) +
+    scale_y_continuous(labels=label_number()) +
+    ylab("tuhat ühikut") +
+    xlab("Aasta") + 
+    ggtitle("Kulutatud energia ja kütus", subtitle = "Kulutatud energia ja kütuse hulk aastatel 2011 - 2020") +
+    scale_color_identity() +
+    theme_swd() +
+    coord_capped_cart(bottom = 'both', left = "both")  +
+    theme(
+      axis.text.x = element_text(size = 9, color = GRAY7),
+      axis.text.y = element_text(size = 9, color = GRAY7),
+      legend.position = "none"
+    ) +
+    ylim(c(0, 25000))
+
+ggsave("2_kogused.png")
+```
+
+Üleval olevalt jooniselt näeme, et kõiki muid energia liike on võrdlemisi võrdselt tarbitud aastate 2011 - 2020 jooksul, kuid viimastel aastatel on langema hakanud põlevkivi tarbimine.
+
+Energia- ja kütuseliikide võrdlemine tegevusvaldkondade lõikes:
+
+Selleks lühendan tegevusvaldkondade nimetused:
+
+```{r}
+Alad = unique(data$Tegevusala)
+length(Alad)
+Alad1 = Alad[1:13]
+Alad2 = Alad[14:26]
+Alad3 = Alad[27:39]
+
+
+data = data %>%
+  mutate(
+    Ala = case_when(
+    Tegevusala == "Turba tootmine ja muu kaevandamine" ~ "Turba tootmine",
+    Tegevusala == "Toiduainete tootmine, joogitootmine" ~ "Toiduainetööstus",
+    Tegevusala == "Tekstiili- ja rõivatootmine, nahatöötlemine ja nahktoodete tootmine" ~ "Tekstiilitööstus",
+    Tegevusala == "Paberi ja pabertoodete tootmine, trükindus ja salvestiste paljundus" ~ "Paberitööstus-trükkimine",
+    Tegevusala == "Koksi ja puhastatud naftatoodete tootmine" ~ "Koksi ja naftatoodete tootmine",
+    Tegevusala == "keemia- ja farmaatsiatoodete tootmine" ~ "Farmaatsiatööstus",
+    Tegevusala == "arvutite, elektriseadmete ja transpordivahendite tootmine" ~ "Elektroonikatööstus",
+    Tegevusala == "Elektrienergia-, auru- ja kuumaveevarustus" ~ "Energia- ja veevarustus",
+    Tegevusala == "Laondus, posti- ja kulleriteenistus" ~ "Laondus ja post",
+    Tegevusala == "Muude mittemetalsetest mineraalidest toodete tootmine" ~ "Mineraaltooted",
+    TRUE ~ Tegevusala
+    )
+  )
+```
+
+2019.a kulutused erinevatele energia/kütuse liikidele tegevusalade lõikes:
+
+```{r}
+teg = data %>% 
+  mutate(Ala = fct_reorder(Ala,Kogukulu)) %>%
+  filter(Tegevusala != "Kodumajapidamine") %>%
+  filter(Aasta == 2019) %>%
+  group_by(Ala) %>% 
+  summarise(.groups="keep",Kokku = sum(Kogukulu)/1000) %>%
+  filter(Kokku>50)
+
+teg = teg %>% 
+  mutate(Ala = fct_reorder(Ala, Kokku, .desc = T)) 
+  
+ggplot(teg,
+  aes(x = Kokku, y = Ala)) +
+  geom_bar(stat = "identity", position = "dodge",fill = GRAY5) +
+  geom_text(aes(label=round(Kokku)), color="white", hjust=1,nudge_x = -3,
+            data= ~.x %>% filter(Ala %in% 
+                                   c("Energia- ja veevarustus", 
+                                     "Maismaaveondus", 
+                                     "Puidutöötlemine",
+                                     "Ehitus",
+                                     "Hulgi- ja jaekaubandus",
+                                     "Koksi ja naftatoodete tootmine",
+                                     "Põllumajandus"))) +
+  ylab("") +
+  xlab("mln eurot") +
+  ggtitle("Kulutused energiale ja kütusele valdkondade lõikes", subtitle = "Valdkonnad, mille kulutused energiale ja kütusele on aastatel 2011 - 2020 ületanud 50 mln eurot") +
+  coord_capped_cart(bottom = 'both', left = "both")  +
+  #scale_y_discrete(labels = label_wrap(width = 40)) +
+  theme_swd() +
+  theme(
+    legend.position = "none"
+  )
+
+ggsave("6_valdkonniti.png")
+```
+
+Üleval olevas tabelis leiduvad valdkonnad:
+
+```{r}
+Alad_suuremad = unique(teg$Ala)
+```
+
+Antud valdkondadest top6 täpsem kulutuste jaotus energia- ja kütuseliikide lõikes:
+
+```{r}
+teg = data %>% 
+  filter(Liik %in% Liigid) %>%
+  filter(Ala %in% c("Energia- ja veevarustus", "Maismaaveondus", 
+                    "Puidutöötlemine","Ehitus",
+                    "Koksi ja naftatoodete tootmine","Põllumajandus")) %>%
+  mutate(Ala = fct_reorder(Ala,Kogukulu)) %>%
+  filter(Tegevusala != "Kodumajapidamine") %>%
+  filter(Aasta == 2019) %>%
+  group_by(Ala, Liik) %>% 
+  summarise(.groups="keep",Kokku = sum(Kogukulu)/1000) %>%
+  mutate(bar_color = case_when(
+    Liik %in% c("Autobensiin") ~ BLUE2,
+    Liik %in% c("Diislikütus") ~ GREEN3,
+    Liik %in% c("Elektrienergia") ~ GREEN2,
+    Liik %in% c("Soojus") ~ ORANGE1,
+    Liik %in% c("Põlevkivi") ~ RED1,
+    Liik %in% c("Kerge kütteõli") ~ GRAY3,
+    Liik %in% c("Maagaas") ~ GREEN1,
+    TRUE ~ GRAY9
+  ))
+
+teg = teg %>% 
+  mutate(Ala = fct_reorder(Ala, Kokku, .desc = T)) 
+  
+ggplot(teg,
+  aes(x = Kokku, y = Liik, fill = bar_color)) +
+  facet_wrap( ~ Ala) +
+  geom_bar(stat = "identity", position = "dodge") +
+  ylab("") +
+  xlab("mln eurot") +
+  ggtitle("Kulutused energiale ja kütusele valdkondade ja liikide lõikes", subtitle = "Valdkonnad, mille kulutused energiale ja kütusele on aastatel 2011 - 2020 ületanud 50 mln eurot") +
+  scale_fill_identity() +
+  theme_swd() +
+  theme(
+    legend.position = "none"
+  )
+
+ggsave("7_valdk_liigiti.png", width = 9, height = 6)
+```
+
+## Kodumajapidamiste energia kulutused
+
+```{r}
+data %>% 
+  #filter(Liik %in% Liigid) %>% <<<.... ei pane seda tingimust siia
+  filter(Aasta == 2019) %>%
+  filter(Tegevusala == "Kodumajapidamine") %>%
+  group_by(Liik) %>% 
+  summarise(.groups="keep",Kokku = sum(Kogukulu)/1000) %>%
+  filter(Kokku > 2) %>%
+  mutate(Liik = fct_reorder(Liik,Kokku, .desc = T)) %>%
+  mutate(bar_color = case_when(
+    Liik %in% c("Autobensiin") ~ BLUE2,
+    #Liik %in% c("Diislikütus") ~ GREEN3,
+    Liik %in% c("Elektrienergia") ~ GREEN2,
+    Liik %in% c("Soojus") ~ ORANGE1,
+    #Liik %in% c("Põlevkivi") ~ RED1,
+    #Liik %in% c("Kerge kütteõli") ~ GRAY3,
+    #Liik %in% c("Maagaas") ~ GREEN1,
+    TRUE ~ GRAY9
+  )) %>%
+  ggplot(aes(x = Kokku, y = Liik, fill = bar_color)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    ylab("") +
+    xlab("mln eurot") +
+    scale_y_discrete(labels = label_wrap(width = 40)) +
+    ggtitle("Kodumajapidamiste energiakulutused", subtitle = "Kodumajapidamiste kulutused energiale ja kütusele 2019. aastal") +
+    coord_capped_cart(bottom = 'both')  +
+    scale_fill_identity() +
+    theme_swd() +
+    theme(
+      legend.position = "none",
+      axis.ticks.y = element_blank()
+    ) +
+    xlim(0,300)
+
+ggsave("5_kodumajapidamised.png")
+```
+
+## Energia ja kütuse andmed kaardil
+
+```{r}
+Maakonnad = c("Harju maakond", "Hiiu maakond", "Ida-Viru maakond", "Jõgeva maakond", "Järva maakond", "Lääne maakond", "Lääne-Viru maakond", "Põlva maakond", "Pärnu maakond", "Rapla maakond", "Saare maakond", "Tartu maakond", "Valga maakond", "Viljandi maakond", "Võru maakond")
+Maakonnad
+```
+
+```{r}
+load("eesti.RData", verbose = T)
+```
+
+```{r}
+maakond
+```
+
+```{r}
+ggplot(maakond) +
+  geom_sf()
+```
+
+```{r}
+mk_liik = data_mk %>%
+  filter(Maakond %in% Maakonnad) %>%
+  filter(Liik %in% Liigid) %>%
+  group_by(Maakond,Liik) %>%
+  summarise(.groups="keep",Kokku = sum(Kogukulu)/1000)
+```
+
+```{r}
+kaardile = maakond %>% 
+  right_join(mk_liik %>% rename(MNIMI = Maakond))
+
+kaardile
+```
+
+```{r}
+ggplot(kaardile) + # vm on leftjoinitud maakond
+  geom_sf(aes(fill = Kokku)) +
+  facet_wrap(~Liik) +
+  scale_fill_gradient("mln eurot", low = BLUE1, high = "white") +
+  ggtitle("Kulutused energiale ja kütusele kaardil", subtitle = "Kulused energia- ja kütuseliikide lõikes aastatel 2011 - 2020") +
+  theme_swd() +
+  theme(
+    axis.line = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    legend.text = element_text(colour=GRAY6)
+  )
+
+ggsave("8_kaardil.png", width = 9, height = 6)
+```
+
+```{r}
+Liigid
+```
+
+```{r}
+V = c(ORANGE1,GRAY9,RED1,GRAY9,GREEN1,GRAY9,GREEN2,GREEN3,BLUE2)
+
+a = kaardile %>%
+    filter(Liik == Liigid[1]) %>%
+    ggplot() + # vm on leftjoinitud maakond
+    geom_sf(aes(fill = Kokku)) +
+    facet_wrap(~Liik) +
+    scale_fill_gradient("mln eurot", low = V[1], high = "white") +
+    theme_void() +
+    theme(legend.position = "none")
+
+b = kaardile %>%
+    filter(Liik == Liigid[2]) %>%
+    ggplot() + # vm on leftjoinitud maakond
+    geom_sf(aes(fill = Kokku)) +
+    facet_wrap(~Liik) +
+    scale_fill_gradient("mln eurot", low = V[2], high = "white") +
+    theme_void()+
+    theme(legend.position = "none")
+
+c = kaardile %>%
+    filter(Liik == Liigid[3]) %>%
+    ggplot() + # vm on leftjoinitud maakond
+    geom_sf(aes(fill = Kokku)) +
+    facet_wrap(~Liik) +
+    scale_fill_gradient("mln eurot", low = V[3], high = "white") +
+    theme_void()+
+    theme(legend.position = "none")
+
+d = kaardile %>%
+    filter(Liik == Liigid[4]) %>%
+    ggplot() + # vm on leftjoinitud maakond
+    geom_sf(aes(fill = Kokku)) +
+    facet_wrap(~Liik) +
+    scale_fill_gradient("mln eurot", low = V[4], high = "white") +
+    theme_void()+
+    theme(legend.position = "none")
+
+e = kaardile %>%
+    filter(Liik == Liigid[5]) %>%
+    ggplot() + # vm on leftjoinitud maakond
+    geom_sf(aes(fill = Kokku)) +
+    facet_wrap(~Liik) +
+    scale_fill_gradient("mln eurot", low = V[5], high = "white") +
+    theme_void()+
+    theme(legend.position = "none")
+
+f = kaardile %>%
+    filter(Liik == Liigid[6]) %>%
+    ggplot() + # vm on leftjoinitud maakond
+    geom_sf(aes(fill = Kokku)) +
+    facet_wrap(~Liik) +
+    scale_fill_gradient("mln eurot", low = V[6], high = "white") +
+    theme_void()+
+    theme(legend.position = "none")
+
+g = kaardile %>%
+    filter(Liik == Liigid[7]) %>%
+    ggplot() + # vm on leftjoinitud maakond
+    geom_sf(aes(fill = Kokku)) +
+    facet_wrap(~Liik) +
+    scale_fill_gradient("mln eurot", low = V[7], high = "white") +
+    theme_void()+
+    theme(legend.position = "none")
+
+h = kaardile %>%
+    filter(Liik == Liigid[8]) %>%
+    ggplot() + # vm on leftjoinitud maakond
+    geom_sf(aes(fill = Kokku)) +
+    facet_wrap(~Liik) +
+    scale_fill_gradient("mln eurot", low = V[8], high = "white") +
+    theme_void()+
+    theme(legend.position = "none")
+
+i = kaardile %>%
+    filter(Liik == Liigid[9]) %>%
+    ggplot() + # vm on leftjoinitud maakond
+    geom_sf(aes(fill = Kokku)) +
+    facet_wrap(~Liik) +
+    scale_fill_gradient("mln eurot", low = V[9], high = "white") +
+    theme_void()+
+    theme(legend.position = "none")
+
+(a | b | c ) / ( d | e | f ) / ( g | h | i ) +
+  ggtitle("Kulutused energiale ja kütusele kaardil", subtitle = "Kulused energia- ja kütuseliikide lõikes aastatel 2011 - 2020") +
+  theme_swd +
+  theme(
+    axis.line = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+```
